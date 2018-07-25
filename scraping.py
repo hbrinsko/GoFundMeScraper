@@ -2,6 +2,9 @@ import requests
 import pyexcel as pe
 from bs4 import BeautifulSoup
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+import csv
+import re
+from datetime import datetime
 
 class Text:
     def __init__(self, body, length, sentiment):
@@ -16,7 +19,8 @@ class Goal:
 
     def pctRaised(self,raised,goal):
         pct = round(raised/goal,2)
-        return (str(pct) + "%")
+        #return (str(pct) + "%")
+        return float(pct)
 
 class Campaign:
     def __init__(self, url, campaignTitle, goal, shareCount, campaignDesc, donorCount, timePeriod):
@@ -70,7 +74,8 @@ def clean_donor_count(donorCountText):
 
 
 def generate_urls(city, state, urls):
-    url = "https://www.gofundme.com/mvc.php?route=category&term=" + city + "%2C" + state
+    url = "https://www.gofundme.com/search/us/" +  city + "-" + state + "-" "fundraising"
+    print(url)
     req = requests.get(url)
     soup = BeautifulSoup(req.text, "lxml")
     data = soup.findAll('div',attrs={'class':'react-campaign-tile-details'})
@@ -89,16 +94,23 @@ def sentiment_analyzer(s):
 
 def scrape():
     urls = []
-    campagins = []
+    campaigns = []
+
     #Place (city, stateAbbreviation) tuples in a list that you would like to be scraped
-    locations = [("Austin", "TX")]    
+    locations = [["austin","tx"], ["san-antonio", "tx"], ["dallas", "tx"], ["houston", "tx"], ["fort-worth","tx"], ["el-paso", "tx"], ["arlington", "tx"]]    
     for city, state in locations:
         generate_urls(city, state, urls)
 
     for url in urls:
-
         req = requests.get(url)
         soup = BeautifulSoup(req.text, "lxml")
+
+        #Exclude archived campaigns
+        active = soup.find('div', class_="var-width-column")
+        if active:
+            if "no longer active" in active.text:
+                print(url)
+                break
 
         #Grabbing title 
         title = soup.find('h1', class_='campaign-title')
@@ -117,8 +129,8 @@ def scrape():
         cShareCount = clean_share_count(soup.find('strong', class_='js-share-count-text'))
 
         #Grabbing description
-        desc=soup.find('div', class_='co-story')
-        desc =desc.text.strip('\n')
+        desc = soup.find('div', class_='co-story')
+        desc = re.sub('\s+',' ',desc.text)
 
         length = len(desc.strip().lower().split())
         sent = sentiment_analyzer(desc)
@@ -131,8 +143,16 @@ def scrape():
         cData = {
             "url": c.url,
             "title": c.campaignTitle.body,
-            "title-length": c.campaignTitle.length 
+            "title-length": c.campaignTitle.length,
+            "title-sentiment": c.campaignTitle.sentiment,
+            "description": c.campaignDesc.body,
+            "description-length": c.campaignDesc.length,
+            "description-sentiment": c.campaignDesc.sentiment,
+            "share-count": c.shareCount,
+            "donor-count": c.donorCount,
+            "raised": c.goal.goal,
+            "pct-goal-met": c.goal.pctRaised(raised, goal)
         }
 
-        campagins.append(cData)
-    return campagins
+        campaigns.append(cData)
+    return campaigns
