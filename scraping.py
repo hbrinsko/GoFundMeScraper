@@ -7,19 +7,24 @@ import re
 from datetime import datetime
 
 class Text:
-    def __init__(self, body, length, sentiment):
+    def __init__(self, body):
         self.body = body
-        self.length = length
-        self.sentiment = sentiment
+
+    def calculate_sentiment(self, analyzer):
+        vs = analyzer.polarity_scores(self.body)
+        return(vs["compound"])
+        
+    def calculate_length(self):
+        return len(self.body.strip().lower().split())
+
 
 class Goal:
-    def __init__(self,raised,goal):
+    def __init__(self,raised, goal):
         self.raised = raised
         self.goal = goal
 
-    def pctRaised(self,raised,goal):
-        pct = round(raised/goal,2)
-        #return (str(pct) + "%")
+    def pct_raised(self):
+        pct = round(self.raised/self.goal,2)
         return float(pct)
 
 class Campaign:
@@ -75,7 +80,6 @@ def clean_donor_count(donorCountText):
 
 def generate_urls(city, state, urls):
     url = "https://www.gofundme.com/search/us/" +  city + "-" + state + "-" "fundraising"
-    print(url)
     req = requests.get(url)
     soup = BeautifulSoup(req.text, "lxml")
     data = soup.findAll('div',attrs={'class':'react-campaign-tile-details'})
@@ -83,18 +87,14 @@ def generate_urls(city, state, urls):
       links = div.findAll('a')
       for a in links:
         this_link = a['href']
-        if this_link not in urls:
+        if this_link not in urls and this_link != '':
             urls.append(this_link)
     return urls
-
-def sentiment_analyzer(s):
-    analyzer = SentimentIntensityAnalyzer()
-    vs = analyzer.polarity_scores(s)
-    return(vs["compound"])
 
 def scrape():
     urls = []
     campaigns = []
+    analyzer = SentimentIntensityAnalyzer()
 
     #Place (city, stateAbbreviation) tuples in a list that you would like to be scraped
     locations = [["austin","tx"], ["san-antonio", "tx"], ["dallas", "tx"], ["houston", "tx"], ["fort-worth","tx"], ["el-paso", "tx"], ["arlington", "tx"]]    
@@ -102,6 +102,7 @@ def scrape():
         generate_urls(city, state, urls)
 
     for url in urls:
+        print(url)
         req = requests.get(url)
         soup = BeautifulSoup(req.text, "lxml")
 
@@ -114,16 +115,19 @@ def scrape():
 
         #Grabbing title 
         title = soup.find('h1', class_='campaign-title')
-        title = title.text
+        if title is None:
+            ctitle=Text('')
+        else:
+            ctitle = Text(title.text)
 
-        length = len(title.strip().lower().split())
-        desc_sent = sentiment_analyzer(title)
-        ctitle = Text(title, length, desc_sent)
         
         #Grabbing goal info
-        goal_class = soup.find('h2', class_='goal').text
-        raised, goal = clean_goal(goal_class)
-        cgoal = Goal(raised, goal)
+        goal_class = soup.find('h2', class_='goal')
+        if goal_class is None:
+            cgoal = Goal(0, 0)
+        else:
+            raised, goal = clean_goal(goal_class.text)
+            cgoal = Goal(raised, goal)
 
         #Grabbing share count
         cShareCount = clean_share_count(soup.find('strong', class_='js-share-count-text'))
@@ -131,10 +135,10 @@ def scrape():
         #Grabbing description
         desc = soup.find('div', class_='co-story')
         desc = re.sub('\s+',' ',desc.text)
-
-        length = len(desc.strip().lower().split())
-        sent = sentiment_analyzer(desc)
-        cDesc = Text(desc, length, sent)
+        if desc is None:
+            cDesc = Text('')
+        else:
+            cDesc = Text(desc)
 
         #Grabbing donor count and time spent fundraising
         donor, time = clean_donor_count(soup.find('div', class_='campaign-status text-small').text)
@@ -143,15 +147,15 @@ def scrape():
         cData = {
             "url": c.url,
             "title": c.campaignTitle.body,
-            "title-length": c.campaignTitle.length,
-            "title-sentiment": c.campaignTitle.sentiment,
+            "title-length": c.campaignTitle.calculate_length(),
+            "title-sentiment": c.campaignTitle.calculate_sentiment(analyzer),
             "description": c.campaignDesc.body,
-            "description-length": c.campaignDesc.length,
-            "description-sentiment": c.campaignDesc.sentiment,
+            "description-length": c.campaignDesc.calculate_length(),
+            "description-sentiment": c.campaignDesc.calculate_sentiment(analyzer),
             "share-count": c.shareCount,
             "donor-count": c.donorCount,
             "raised": c.goal.goal,
-            "pct-goal-met": c.goal.pctRaised(raised, goal)
+            "pct-goal-met": c.goal.pct_raised()
         }
 
         campaigns.append(cData)

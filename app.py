@@ -4,8 +4,9 @@ import scraping
 import config
 
 if __name__ == "__main__":
-    
-    uri ="mongodb://" + config.user + ":" + config.password + "@ds243441.mlab.com:43441/gofundme"
+
+    uri = "mongodb://" + config.user + ":" + \
+        config.password + "@ds243441.mlab.com:43441/gofundme"
 
     client = pymongo.MongoClient(uri)
     db = client.get_default_database()
