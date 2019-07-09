@@ -24,8 +24,11 @@ class Goal:
         self.goal = goal
 
     def pct_raised(self):
-        pct = round(self.raised/self.goal,2)
-        return float(pct)
+        if self.goal is not 0:
+            pct = round(self.raised/self.goal,2)
+            return float(pct)
+        else:
+            return self.goal
 
 class Campaign:
     def __init__(self, url, campaignTitle, goal, shareCount, campaignDesc, donorCount, timePeriod):
@@ -68,9 +71,14 @@ def clean_share_count(shareCountText):
 
 def clean_donor_count(donorCountText):
     if 'Campaign created ' in donorCountText:
-        time, suffix = donorCountText.replace('Campaign created ','').split(' month')
-        time = time.replace(' ','').strip('\n')
-        donorCountText = 0
+        if 'month' in donorCountText:
+            time, suffix = donorCountText.replace('Campaign created ','').split(' month')
+            time = time.replace(' ','').strip('\n')
+            donorCountText = 0
+        elif 'day' in donorCountText:
+            time, suffix = donorCountText.replace('Campaign created ','').split(' day')
+            time = time.replace(' ','').strip('\n')
+            donorCountText = 0
     else:
         donorCountText, time = donorCountText.replace('Raised by ','').split(' in ')
         donorCountText = donorCountText.replace(' ','').replace(',','').strip('\n').replace('people','').replace('person','')
@@ -134,14 +142,21 @@ def scrape():
 
         #Grabbing description
         desc = soup.find('div', class_='co-story')
-        desc = re.sub('\s+',' ',desc.text)
         if desc is None:
             cDesc = Text('')
         else:
+            desc = re.sub('\\s+',' ',desc.text)
             cDesc = Text(desc)
 
         #Grabbing donor count and time spent fundraising
-        donor, time = clean_donor_count(soup.find('div', class_='campaign-status text-small').text)
+        donor_count = soup.find('div', class_='campaign-status text-small')
+        if donor_count is None:
+            donor = ''
+            time = ''
+        else:
+            donor, time = clean_donor_count(donor_count.text)
+
+
 
         c = Campaign(url, ctitle, cgoal, cShareCount, cDesc, donor, time)
         cData = {
